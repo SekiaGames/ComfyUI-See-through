@@ -362,8 +362,21 @@ class SeeThrough_LoadLayerDiffModel:
         else:
             unet = UNetFrameConditionModel.from_pretrained(pretrained, subfolder="unet", local_files_only=local_only)
 
+        # 0.5.0 的 KDiffusionStableDiffusionXLPipeline 在 scheduler=None 时会写死去拉
+        # frankjoshua/juggernautXL_version6Rundiffusion 的 scheduler/scheduler_config.json，
+        # 离线或镜像不通时必然报 “does not appear to have a file named scheduler_config.json”。
+        # 本地模型目录自带同一份配置（DPMPP_2M_SDE + final_sigmas_type=zero，SDXL betas），
+        # 所以优先从本地读，读不到才退回原行为。
+        scheduler = None
+        _sched_dir = os.path.join(pretrained, "scheduler")
+        if os.path.isfile(os.path.join(_sched_dir, "scheduler_config.json")):
+            from diffusers import DPMSolverMultistepScheduler
+            scheduler = DPMSolverMultistepScheduler.from_pretrained(
+                pretrained, subfolder="scheduler", local_files_only=True)
+            print("[SeeThrough] Scheduler from local model dir (no juggernaut fetch)", flush=True)
+
         pipeline = KDiffusionStableDiffusionXLPipeline.from_pretrained(
-            pretrained, trans_vae=trans_vae, unet=unet, scheduler=None, local_files_only=local_only)
+            pretrained, trans_vae=trans_vae, unet=unet, scheduler=scheduler, local_files_only=local_only)
 
         if vae_ckpt:
             print(f"[SeeThrough] Loading custom VAE from: {vae_ckpt}", flush=True)

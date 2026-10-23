@@ -229,8 +229,16 @@ class TransparentVAEDecoder(torch.nn.Module):
             break
 
         result = torch.stack(result, dim=0)
-        median = torch.median(result, dim=0).values
-        return median
+        # Apple MPS 的 MPSNDArraySort 只支持 axis 0..3；result 是 5 维
+        # (n_aug, B, C, H, W)，torch.median(dim=0) 会触发
+        # "Axis = 4 ... only supports axis = 0, 1, 2, 3" 并把进程 abort。
+        # 只有一个增强分支时（当前 args 循环 break，必定如此）中位数就是它自己，
+        # 多分支则退回 CPU 算。
+        if result.shape[0] == 1:
+            return result[0]
+        if result.ndim > 4 and result.device.type == "mps":
+            return result.cpu().median(dim=0).values.to(result.device)
+        return torch.median(result, dim=0).values
 
     @torch.no_grad()
     def forward(self, sd_vae, latent, return_type='numpy', rgb_cond=None, mask=None, return_rgb=False):
