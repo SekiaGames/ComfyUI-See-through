@@ -859,6 +859,11 @@ class SeeThrough_PostProcess:
             for eye_tag in ["eyewhite", "irides", "eyelash", "eyebrow"]:
                 _tag_lr_split(eye_tag, tag2pinfo)
             _tag_lr_split("ears", tag2pinfo)
+            # 腿和鞋也试着分左右：只有「左腿和右腿是两个不连通的块」时才拆得开。
+            # 侧面/3-4 视角两条腿在画面上叠在一起，是一个连通块，这里会原样保留整块——
+            # 要拆开得换正面（或两腿分开）的站姿图，或者走按关节切件的路线。
+            for limb_tag in ["legwear", "footwear"]:
+                _tag_lr_split(limb_tag, tag2pinfo)
 
             if "hair" in tag2pinfo:
                 part_info = tag2pinfo.pop("hair")
