@@ -409,7 +409,10 @@ class SeeThrough_LoadLayerDiffModel:
         if group_offload:
             if hasattr(pipeline, 'enable_group_offload'):
                 print("[SeeThrough] Enabling group offload for LayerDiff pipeline", flush=True)
-                pipeline.enable_group_offload('cuda', num_blocks_per_group=1)
+                # onload_device 写死 'cuda' 在 macOS 上会直接炸（MPS 机器没有 cuda 设备），
+                # 用当前实际设备，显存放不下的块退回 CPU。
+                pipeline.enable_group_offload(mm.get_torch_device(), offload_device='cpu',
+                                              num_blocks_per_group=1)
                 pipeline._st_group_offload = True
             else:
                 print("[SeeThrough] WARNING: group_offload requires diffusers >= 0.37.0, skipping. Please upgrade: pip install diffusers>=0.37.0", flush=True)
@@ -484,7 +487,10 @@ class SeeThrough_LoadDepthModel:
         if group_offload:
             if hasattr(pipeline, 'enable_group_offload'):
                 print("[SeeThrough] Enabling group offload for Marigold pipeline", flush=True)
-                pipeline.enable_group_offload('cuda', num_blocks_per_group=1)
+                # onload_device 写死 'cuda' 在 macOS 上会直接炸（MPS 机器没有 cuda 设备），
+                # 用当前实际设备，显存放不下的块退回 CPU。
+                pipeline.enable_group_offload(mm.get_torch_device(), offload_device='cpu',
+                                              num_blocks_per_group=1)
                 pipeline._st_group_offload = True
             else:
                 print("[SeeThrough] WARNING: group_offload requires diffusers >= 0.37.0, skipping. Please upgrade: pip install diffusers>=0.37.0", flush=True)

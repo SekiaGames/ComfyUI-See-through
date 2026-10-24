@@ -114,7 +114,7 @@ ComfyUI/models/SeeThrough/
 | `num_inference_steps` | 30 | 扩散去噪步数（越多质量越好，速度越慢） |
 | `tblr_split` | true | 是否将对称部位（眼睛、耳朵、手套）拆分为左/右 |
 | `cache_tag_embeds` | true | 预计算并缓存标签嵌入，然后卸载文本编码器以节省显存 |
-| `group_offload` | false | 启用分组卸载，大幅降低峰值显存（实际占用约 0.2GB，预留约 7GB），但速度**慢 2–3 倍**。需要 `diffusers>=0.37.0` |
+| `group_offload` | false | 启用分组卸载，大幅降低峰值显存（实际占用约 0.2GB，预留约 7GB），但速度**慢 2–3 倍**。需要 `diffusers>=0.37.0`；macOS（MPS）也能用，之前设备写死 cuda 的 bug 已修 |
 | `auto_download` | false | 本地找不到模型时是否自动从 HuggingFace 下载。默认关闭，避免模型名写错就静默拉几个 GB |
 | `resolution_depth` | -1 | 深度推理分辨率。-1 表示与图层相同。深度只用于图层排序（`depth_median`），图层像素不受它影响，所以降到 512~768 几乎无代价；`seethrough-basic.json` 里已设 512 |
 | `filename_prefix` | `image` | 输出文件名前缀。前端会按 LoadImage 的文件名自动填（`TT.png` → `TT`），实现「图名 = 目录名 = 前缀」；你手动改过的值不会被覆盖 |

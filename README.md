@@ -114,7 +114,7 @@ Drag any `.json` file into ComfyUI to load the workflow.
 | `num_inference_steps` | 30 | Diffusion denoising steps (more = better quality, slower) |
 | `tblr_split` | true | Split symmetric parts (eyes, ears, handwear) into left/right |
 | `cache_tag_embeds` | true | Pre-compute and cache tag embeddings, then unload text encoders to save VRAM |
-| `group_offload` | false | Enable group offload to drastically reduce peak VRAM (allocated ~0.2GB, reserved ~7GB) at cost of **2–3x slower** speed. Requires `diffusers>=0.37.0` |
+| `group_offload` | false | Enable group offload to drastically reduce peak VRAM (allocated ~0.2GB, reserved ~7GB) at cost of **2–3x slower** speed. Requires `diffusers>=0.37.0`. Also works on macOS/MPS now — the device was hardcoded to cuda before |
 | `auto_download` | false | If the model is not found locally, download it from HuggingFace. Off by default so a typo in the model name can't silently pull several GB |
 | `resolution_depth` | -1 | Resolution for depth inference. -1 uses the same as layers. Depth only feeds layer ordering (`depth_median`) — layer pixels are never resized by it — so lowering it to 512-768 is nearly free; `seethrough-basic.json` ships with 512 |
 | `filename_prefix` | `image` | Output name prefix. The frontend fills it from the LoadImage filename (`TT.png` → `TT`), so image name = folder name = prefix. It never overwrites a value you typed by hand |
