@@ -150,10 +150,68 @@ async function createPSD(layerInfo, psdType) {
     console.log(`[SeeThrough] PSD downloaded: ${prefix}_${timestamp}${suffix}.psd`);
 }
 
+// ---------------------------------------------------------------------------
+// filename_prefix 跟着输入图的名字走
+//
+// 约定：站姿图名 = 素材目录名 = filename_prefix。比如 TT.png -> 前缀 TT，
+// 输出目录里就是 TT_*.png，下游按目录名 TT 就能认领这批拆分。
+// ComfyUI 里 LoadImage 只输出 IMAGE、没有文件名字符串，所以只能在前端替它填。
+// ---------------------------------------------------------------------------
+const PLACEHOLDER_PREFIXES = new Set(["", "image", "seethrough", "rqx"]);
+
+function imagePrefix(filename) {
+    if (!filename) return "";
+    let name = String(filename);
+    name = name.replace(/^\(pid-[^)]*\)/, "");       // 粘贴的图会带 (pid-1234) 前缀
+    name = name.split(/[\\/]/).pop();                 // 去掉子目录
+    name = name.replace(/\.[^.]+$/, "");              // 去扩展名
+    return name.replace(/[^\p{L}\p{N}_-]+/gu, "_").replace(/^_+|_+$/g, "");
+}
+
+function findPrefixWidget(node) {
+    return (node.widgets || []).find((w) => w.name === "filename_prefix");
+}
+
+function syncPrefix(graph) {
+    if (!graph || !graph._nodes) return;
+    const saves = graph._nodes.filter((n) => n.comfyClass === "SeeThrough_SavePSD");
+    if (!saves.length) return;
+    // 优先取真正接着 Save 的那条链上的 LoadImage；退而求其次取图里的第一个
+    const loads = graph._nodes.filter((n) => n.comfyClass === "LoadImage");
+    if (!loads.length) return;
+    const stem = imagePrefix(loads[0].widgets?.[0]?.value);
+    if (!stem) return;
+
+    for (const s of saves) {
+        const w = findPrefixWidget(s);
+        if (!w) continue;
+        // 用户手动改过就不动它；只覆盖占位值或上次自动填的值
+        const auto = w._autoFrom;
+        if (w.value && !PLACEHOLDER_PREFIXES.has(String(w.value).toLowerCase()) && w.value !== auto) continue;
+        if (w.value === stem) { w._autoFrom = stem; continue; }
+        w.value = stem;
+        w._autoFrom = stem;
+        s.setDirtyCanvas?.(true, true);
+        console.log(`[SeeThrough] filename_prefix -> ${stem}（跟着输入图 ${loads[0].widgets?.[0]?.value}）`);
+    }
+}
+
 app.registerExtension({
     name: "ComfyUI-See-through.SavePSD",
 
     async nodeCreated(node) {
+        // 输入图换了名字 -> 前缀跟着换
+        if (node.comfyClass === "LoadImage" || node.comfyClass === "SeeThrough_SavePSD") {
+            setTimeout(() => syncPrefix(node.graph), 0);
+        }
+        if (node.comfyClass === "LoadImage") {
+            const orig = node.onWidgetChanged;
+            node.onWidgetChanged = function (name, ...rest) {
+                const r = orig?.apply(this, arguments);
+                if (name === "image") setTimeout(() => syncPrefix(this.graph), 0);
+                return r;
+            };
+        }
         if (node.comfyClass !== "SeeThrough_SavePSD") return;
 
         console.log("[SeeThrough] Setting up frontend PSD generator");
@@ -239,6 +297,11 @@ app.registerExtension({
         );
         dlDepthBtn.color = "#6366F1";
         dlDepthBtn.bgcolor = "#4F46E5";
+    },
+
+    // 打开已有工作流时，节点是先建后灌值的，nodeCreated 里读到的还是空 widget
+    loadedGraphNode(node) {
+        if (node.comfyClass === "LoadImage") setTimeout(() => syncPrefix(node.graph), 0);
     },
 });
 

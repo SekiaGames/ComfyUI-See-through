@@ -914,7 +914,12 @@ class SeeThrough_SavePSD:
         return {
             "required": {
                 "parts": ("SEETHROUGH_PARTS",),
-                "filename_prefix": ("STRING", {"default": "seethrough"}),
+                "filename_prefix": ("STRING", {
+                    "default": "seethrough",
+                    "tooltip": "Output filename prefix. The frontend sets this automatically from the "
+                               "LoadImage filename (TT.png -> TT), so the folder name, the standing "
+                               "image name and this prefix all match.",
+                }),
             },
             "optional": {
                 "save_depth": ("BOOLEAN", {

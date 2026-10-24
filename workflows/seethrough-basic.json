@@ -81,7 +81,7 @@
         "Node name for S&R": "SeeThrough_SavePSD"
       },
       "widgets_values": [
-        "Rqx",
+        "image",
         false,
         "Download PSD",
         "Download Depth PSD"

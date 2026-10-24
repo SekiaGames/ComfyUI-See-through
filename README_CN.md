@@ -117,6 +117,7 @@ ComfyUI/models/SeeThrough/
 | `group_offload` | false | 启用分组卸载，大幅降低峰值显存（实际占用约 0.2GB，预留约 7GB），但速度**慢 2–3 倍**。需要 `diffusers>=0.37.0` |
 | `auto_download` | false | 本地找不到模型时是否自动从 HuggingFace 下载。默认关闭，避免模型名写错就静默拉几个 GB |
 | `resolution_depth` | -1 | 深度推理分辨率。-1 表示与图层相同。深度只用于图层排序（`depth_median`），图层像素不受它影响，所以降到 512~768 几乎无代价；`seethrough-basic.json` 里已设 512 |
+| `filename_prefix` | `image` | 输出文件名前缀。前端会按 LoadImage 的文件名自动填（`TT.png` → `TT`），实现「图名 = 目录名 = 前缀」；你手动改过的值不会被覆盖 |
 | `save_depth` | false | 是否为每层额外保存 `<图层>_depth.png`。只有视差 / 3D / 深度 PSD 才需要；关掉可让输出目录的文件数减半。绘制顺序（`depth_median`）照旧写进 `layers.json` |
 
 ### 显存优化指南
