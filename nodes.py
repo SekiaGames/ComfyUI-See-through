@@ -916,6 +916,15 @@ class SeeThrough_SavePSD:
                 "parts": ("SEETHROUGH_PARTS",),
                 "filename_prefix": ("STRING", {"default": "seethrough"}),
             },
+            "optional": {
+                "save_depth": ("BOOLEAN", {
+                    "default": False,
+                    "tooltip": "Write <layer>_depth.png next to every layer. Off by default: "
+                               "depth is only needed for parallax/3D export, and it doubles the "
+                               "file count in the output folder. Drawing order (depth_median) is "
+                               "always recorded in layers.json either way.",
+                }),
+            },
         }
 
     RETURN_TYPES = ("STRING",)
@@ -924,9 +933,14 @@ class SeeThrough_SavePSD:
     CATEGORY = "SeeThrough"
     OUTPUT_NODE = True
 
-    def save(self, parts, filename_prefix="seethrough"):
+    def save(self, parts, filename_prefix="seethrough", save_depth=False):
         from PIL import Image
         import json
+
+        # 旧工作流里这个位置可能是前端按钮留下的字符串（"Download PSD"），
+        # 直接 bool() 会把它当真。只认明确的真值写法。
+        if not isinstance(save_depth, bool):
+            save_depth = str(save_depth).strip().lower() in ("1", "true", "yes", "on")
 
         tag2pinfo = parts["tag2pinfo"]
         frame_size = parts["frame_size"]
@@ -956,7 +970,7 @@ class SeeThrough_SavePSD:
                      "left": x1, "top": y1, "right": x2, "bottom": y2,
                      "depth_median": float(pinfo.get("depth_median", 1))}
 
-            if depth is not None:
+            if save_depth and depth is not None:
                 depth_filename = f"{filename_prefix}_{ts}_{uid}_{tag}_depth.png"
                 if depth.ndim == 2:
                     Image.fromarray(depth, mode="L").save(os.path.join(output_dir, depth_filename))

@@ -218,6 +218,16 @@ app.registerExtension({
                         return;
                     }
                     const layerInfo = await infoResp.json();
+                    const hasDepth = (layerInfo.layers || []).some((l) => l.depth_filename);
+                    if (!hasDepth) {
+                        alert(
+                            "No depth maps in this run.\n\n" +
+                                "The Save node has save_depth turned off, so no *_depth.png was written " +
+                                "and a depth PSD cannot be rebuilt. Enable save_depth and run again if you " +
+                                "need it."
+                        );
+                        return;
+                    }
                     await createPSD(layerInfo, "depth");
                 } catch (error) {
                     console.error("[SeeThrough] Error:", error);

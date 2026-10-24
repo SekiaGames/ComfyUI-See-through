@@ -117,6 +117,7 @@ Drag any `.json` file into ComfyUI to load the workflow.
 | `group_offload` | false | Enable group offload to drastically reduce peak VRAM (allocated ~0.2GB, reserved ~7GB) at cost of **2–3x slower** speed. Requires `diffusers>=0.37.0` |
 | `auto_download` | true | If the model is not found locally, download from HuggingFace. Disable to force local-only and error out instead of downloading |
 | `resolution_depth` | -1 | Resolution for depth inference. -1 uses the same as layers. Lower values (e.g. 720) save VRAM and speed up depth estimation |
+| `save_depth` | false | Write `<layer>_depth.png` for every layer. Only needed for parallax / 3D / depth-PSD export — turning it off halves the file count in the output folder. `depth_median` (drawing order) is always written to `layers.json` |
 
 ### VRAM Optimization Guide
 
