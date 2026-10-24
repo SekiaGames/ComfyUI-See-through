@@ -33,7 +33,7 @@
         { "name": "layerdiff_model", "type": "SEETHROUGH_LAYERDIFF_MODEL", "links": [2] }
       ],
       "properties": { "Node name for S&R": "SeeThrough_LoadLayerDiffModel" },
-      "widgets_values": ["layerdifforg/seethroughv0.0.2_layerdiff3d", "", "", "none", true, false, true]
+      "widgets_values": ["layerdifforg/seethroughv0.0.2_layerdiff3d", "", "", "none", true, false, false]
     },
     {
       "id": 3,
@@ -48,7 +48,7 @@
         { "name": "depth_model", "type": "SEETHROUGH_DEPTH_MODEL", "links": [3] }
       ],
       "properties": { "Node name for S&R": "SeeThrough_LoadDepthModel" },
-      "widgets_values": ["layerdifforg/seethroughv0.0.1_marigold", "none", true, false, true]
+      "widgets_values": ["layerdifforg/seethroughv0.0.1_marigold", "none", true, false, false]
     },
     {
       "id": 4,

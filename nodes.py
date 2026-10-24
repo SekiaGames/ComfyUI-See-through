@@ -330,8 +330,8 @@ class SeeThrough_LoadLayerDiffModel:
                                                   "tooltip": "Pre-compute and cache tag embeddings, then unload text encoders to save VRAM"}),
                 "group_offload": ("BOOLEAN", {"default": False,
                                                "tooltip": "Enable group offload to reduce peak VRAM (~10GB) at cost of ~1.5x slower speed"}),
-                "auto_download": ("BOOLEAN", {"default": True,
-                                               "tooltip": "If model is not found locally, download from HuggingFace. Disable to force local-only and error out instead of downloading."}),
+                "auto_download": ("BOOLEAN", {"default": False,
+                                               "tooltip": "If the model is not found locally, download it from HuggingFace. Off by default: an accidental download is hundreds of MB to several GB, so make it an explicit choice."}),
             },
         }
 
@@ -340,7 +340,7 @@ class SeeThrough_LoadLayerDiffModel:
     FUNCTION = "load_model"
     CATEGORY = "SeeThrough"
 
-    def load_model(self, model, vae_ckpt="", unet_ckpt="", quant_mode="none", cache_tag_embeds=True, group_offload=False, auto_download=True):
+    def load_model(self, model, vae_ckpt="", unet_ckpt="", quant_mode="none", cache_tag_embeds=True, group_offload=False, auto_download=False):
         use_nf4 = quant_mode == "nf4"
         dtype = torch.bfloat16
 
@@ -445,8 +445,8 @@ class SeeThrough_LoadDepthModel:
                                                   "tooltip": "Pre-compute empty text embedding and unload text encoder to save VRAM"}),
                 "group_offload": ("BOOLEAN", {"default": False,
                                                "tooltip": "Enable group offload to reduce peak VRAM at cost of slower speed"}),
-                "auto_download": ("BOOLEAN", {"default": True,
-                                               "tooltip": "If model is not found locally, download from HuggingFace. Disable to force local-only and error out instead of downloading."}),
+                "auto_download": ("BOOLEAN", {"default": False,
+                                               "tooltip": "If the model is not found locally, download it from HuggingFace. Off by default: an accidental download is hundreds of MB to several GB, so make it an explicit choice."}),
             },
         }
 
@@ -455,7 +455,7 @@ class SeeThrough_LoadDepthModel:
     FUNCTION = "load_model"
     CATEGORY = "SeeThrough"
 
-    def load_model(self, model, quant_mode="none", cache_tag_embeds=True, group_offload=False, auto_download=True):
+    def load_model(self, model, quant_mode="none", cache_tag_embeds=True, group_offload=False, auto_download=False):
         use_nf4 = quant_mode == "nf4"
         dtype = torch.bfloat16
 
