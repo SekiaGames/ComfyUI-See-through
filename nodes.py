@@ -959,7 +959,11 @@ class SeeThrough_SavePSD:
 
         output_dir = folder_paths.get_output_directory()
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        uid = str(uuid.uuid4())[:8]
+        # 文件名保持「前缀_时间戳_部位」，不再带 8 位随机后缀：一轮 29 层的名字短一半，
+        # 下游按时间戳认批次也简单（20261024_151110 而不是 20261024_151110_7291cdfe）。
+        # 同一秒里跑两次才可能撞（一轮要几分钟），撞了才补 4 位随机数。
+        if os.path.exists(os.path.join(output_dir, f"{filename_prefix}_{ts}_layers.json")):
+            ts = f"{ts}_{str(uuid.uuid4())[:4]}"
 
         sorted_tags = sorted(tag2pinfo.keys(), key=lambda t: tag2pinfo[t].get("depth_median", 1), reverse=True)
 
@@ -974,7 +978,7 @@ class SeeThrough_SavePSD:
             xyxy = pinfo.get("xyxy", [0, 0, img.shape[1], img.shape[0]])
             x1, y1, x2, y2 = [int(v) for v in xyxy]
 
-            layer_filename = f"{filename_prefix}_{ts}_{uid}_{tag}.png"
+            layer_filename = f"{filename_prefix}_{ts}_{tag}.png"
             Image.fromarray(img).save(os.path.join(output_dir, layer_filename))
 
             entry = {"name": tag, "filename": layer_filename,
@@ -982,7 +986,7 @@ class SeeThrough_SavePSD:
                      "depth_median": float(pinfo.get("depth_median", 1))}
 
             if save_depth and depth is not None:
-                depth_filename = f"{filename_prefix}_{ts}_{uid}_{tag}_depth.png"
+                depth_filename = f"{filename_prefix}_{ts}_{tag}_depth.png"
                 if depth.ndim == 2:
                     Image.fromarray(depth, mode="L").save(os.path.join(output_dir, depth_filename))
                 else:
@@ -991,10 +995,10 @@ class SeeThrough_SavePSD:
 
             layer_info_list.append(entry)
 
-        info_filename = f"{filename_prefix}_{ts}_{uid}_layers.json"
+        info_filename = f"{filename_prefix}_{ts}_layers.json"
         info_path = os.path.join(output_dir, info_filename)
         with open(info_path, "w", encoding="utf-8") as f:
-            json.dump({"prefix": filename_prefix, "timestamp": f"{ts}_{uid}",
+            json.dump({"prefix": filename_prefix, "timestamp": ts,
                        "layers": layer_info_list, "width": int(canvas_w), "height": int(canvas_h)}, f, indent=2)
 
         log_path = os.path.join(output_dir, "seethrough_psd_info.log")
