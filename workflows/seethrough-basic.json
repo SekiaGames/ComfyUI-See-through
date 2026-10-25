@@ -211,6 +211,7 @@
         "randomize",
         1024,
         30,
+        true,
         true
       ]
     },

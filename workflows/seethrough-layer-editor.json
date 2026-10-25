@@ -67,7 +67,7 @@
         { "name": "preview", "type": "IMAGE", "links": null }
       ],
       "properties": { "Node name for S&R": "SeeThrough_GenerateLayers" },
-      "widgets_values": [42, "fixed", 1280, 30, true]
+      "widgets_values": [42, "fixed", 1280, 30, true, true]
     },
     {
       "id": 5,

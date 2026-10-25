@@ -274,6 +274,44 @@ def _detail_base(tag):
     return tag
 
 
+def _is_dust_layer(img):
+    """这一层是模型「这张图没有这个部位」的占位输出，不是内容。
+
+    实测形态（1024 画布）：主内容就是右下角一个 11×13 的实心小块，位置固定在
+    ~(1010, 1009)，另外散着几十个点；整层也就 70 来个像素。导出后是一张
+    1024² 的「空白图」（bbox 被两头的散点撑满，连裁剪都裁不掉）。
+
+    判据故意做得保守，宁可漏删也不误删：
+      · 整层像素 < 画布的 0.02%（1024² 上是 210 px）——真实的耳饰之类虽然小，
+        也在这个量级之上；
+      · 而且主块要么是「又小又贴右下角」的退化块，要么撑不起整层（散成一片碎点）。
+    注意不能按「主块绝对像素数」判：真实的虹膜只有 45 px，比退化块还小。
+    """
+    mask = img[..., -1] > 10
+    total = int(mask.sum())
+    if total == 0:
+        return True
+    h, w = mask.shape[:2]
+    if total >= 0.0002 * w * h:
+        return False
+    n, _, stats, _ = cv2.connectedComponentsWithStats(mask.astype(np.uint8), connectivity=8)
+    if n <= 1:
+        return True
+    main = 1 + int(stats[1:, 4].argmax())
+    bx, by, bw, bh = stats[main, :4]
+    if bw <= 24 and bh <= 24 and bx >= 0.9 * w and by >= 0.9 * h:
+        return True
+    return int(stats[main, 4]) / float(total) < 0.35
+
+
+def _drop_empty_layers(layer_dict):
+    """把所有「占位输出」的层删掉（就地），返回被删的 tag。"""
+    dropped = [t for t, im in layer_dict.items() if _is_dust_layer(im)]
+    for t in dropped:
+        del layer_dict[t]
+    return dropped
+
+
 def _detail_has_content(img):
     """这一层是真的画了东西，还是模型没找到该部位时吐的散碎点。
 
@@ -626,9 +664,14 @@ class SeeThrough_GenerateLayers:
                     "default": True,
                     "tooltip": "Keep eyes / ears / nose / mouth inside the face layer instead of exporting them "
                                "as separate layers. A face is always one piece in a 2D rig, and nose / mouth "
-                               "often come out as scattered dust. Merging here (before depth) also means "
-                               "fewer layers go through the depth model and the rest of the pipeline. "
-                               "Turn off to get the raw split.",
+                               "often come out as scattered dust. Turn off to get the raw split.",
+                }),
+                "drop_empty_layers": ("BOOLEAN", {
+                    "default": True,
+                    "tooltip": "Delete layers the model only filled with a placeholder (a 11x13 dot in the "
+                               "bottom-right corner, ~70 px in total). They export as blank 1024x1024 PNGs "
+                               "and are useless downstream. Real small accessories survive: the check also "
+                               "requires the layer to be under 0.02% of the canvas.",
                 }),
             },
         }
@@ -639,7 +682,7 @@ class SeeThrough_GenerateLayers:
     CATEGORY = "SeeThrough"
 
     def generate(self, image, layerdiff_model, seed=42, resolution=1280, num_inference_steps=30,
-                 merge_face_details=True):
+                 merge_face_details=True, drop_empty_layers=True):
         pipeline = layerdiff_model
         device = mm.get_torch_device()
         offload = torch.device("cpu")
@@ -758,15 +801,24 @@ class SeeThrough_GenerateLayers:
         print(f"[SeeThrough] GenerateLayers complete: {len(layer_dict)} layers", flush=True)
 
         # 面部细节并回 face。放在这里而不是 PostProcess：模型原本就没给 face 画五官，
-        # 五官永远单独一层；而做 2D 骨骼动画时脸是一整块。提前合掉之后，depth 阶段
-        # （Marigold 一次前向算 19 个类）、PostProcess、存盘都少十几个层。
+        # 五官永远单独一层；而做 2D 骨骼动画时脸是一整块。这里各层还没拆左右、
+        # 都是整张画布，叠起来不用管 xyxy。
+        # 注意：这不省时间/显存——depth 阶段的 batch 恒为 19 个槽位（见 GenerateDepth），
+        # 合并只是让输出和下游（PSD / Spine 工作台）少十几层。
         if merge_face_details:
             merged, empty = _merge_face_details(layer_dict, fullpage)
             if merged:
                 print(f"[SeeThrough] Face details merged into 'face': {', '.join(sorted(merged))}", flush=True)
             if empty:
                 print(f"[SeeThrough] Face details dropped (no content): {', '.join(sorted(empty))}", flush=True)
-            print(f"[SeeThrough] GenerateLayers final: {len(layer_dict)} layers", flush=True)
+
+        # 模型没找到的部位会留一个「占位小块」，导出就是一张空白 png。直接删掉。
+        if drop_empty_layers:
+            dust = _drop_empty_layers(layer_dict)
+            if dust:
+                print(f"[SeeThrough] Empty layers dropped: {', '.join(sorted(dust))}", flush=True)
+
+        print(f"[SeeThrough] GenerateLayers final: {len(layer_dict)} layers", flush=True)
 
         layers_data = SeeThrough_LayersData(layer_dict, fullpage, input_img, resolution, pad_size, pad_pos)
 
