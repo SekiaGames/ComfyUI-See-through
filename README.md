@@ -11,7 +11,7 @@ Paper: [arxiv:2602.03749](https://arxiv.org/abs/2602.03749) (Conditionally accep
 - **Single-Image Layer Decomposition** — Input one anime character image, get up to 24 semantic transparent layers (hair, face, eyes, clothing, accessories, etc.)
 - **Depth Estimation** — Automatic depth map generation for each layer via fine-tuned Marigold, establishing correct drawing order
 - **Smart Splitting** — Eyes, ears, handwear split into left/right; hair split into front/back via depth clustering
-- **PSD Export** — Download layered PSD files directly from the browser (frontend ag-psd, no Python dependency)
+- **PSD Export** — the Save node writes one layered PSD server-side (psd-tools); layer names are the semantic tags
 - **Depth PSD** — Separate depth PSD export for 3D/parallax workflows
 - **Preview Output** — Blended reconstruction preview as a standard ComfyUI IMAGE output
 - **HuggingFace Auto-Download** — Models download automatically from HuggingFace on first use
@@ -92,7 +92,7 @@ Both **Load LayerDiff Model** and **Load Depth Model** expose an `auto_download`
 3. Add **SeeThrough Save PSD** — connect the `parts` output
 4. Add **Preview Image** — connect the `preview` output
 5. Run the workflow
-6. Click **Download PSD** button on the Save PSD node to generate and download the PSD file
+6. Run the prompt — the layered PSD is already in ComfyUI's `output/` (`<prefix>_<timestamp>.psd`)
 
 ### Example Workflows
 
@@ -120,7 +120,6 @@ Drag any `.json` file into ComfyUI to load the workflow.
 | `auto_download` | false | If the model is not found locally, download it from HuggingFace. Off by default so a typo in the model name can't silently pull several GB |
 | `resolution_depth` | -1 | Resolution for depth inference. -1 uses the same as layers. Depth only feeds layer ordering (`depth_median`) — layer pixels are never resized by it — so lowering it to 512-768 is nearly free; `seethrough-basic.json` ships with 512 |
 | `filename_prefix` | `image` | Output name prefix. The frontend fills it from the LoadImage filename (`TT.png` → `TT`), so image name = folder name = prefix. It never overwrites a value you typed by hand |
-| `save_depth` | false | Write `<layer>_depth.png` for every layer. Only needed for parallax / 3D / depth-PSD export — turning it off halves the file count in the output folder. `depth_median` (drawing order) is always written to `layers.json` |
 
 ### VRAM Optimization Guide
 
@@ -165,7 +164,7 @@ Each layer is an RGBA image with transparency, positioned at its correct locatio
 
 This plugin wraps the [See-through](https://github.com/shitagaki-lab/see-through) research project by [shitagaki-lab](https://github.com/shitagaki-lab).
 
-PSD generation uses [ag-psd](https://github.com/nicasiomg/ag-psd) in the browser.
+PSD is written server-side with [psd-tools](https://github.com/psd-tools/psd-tools) (listed in `requirements.txt`).
 
 ## License
 

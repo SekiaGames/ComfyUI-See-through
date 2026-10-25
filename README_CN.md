@@ -11,8 +11,7 @@
 - **单图分层分解** — 输入一张动漫角色图片，输出多达 24 个语义透明图层（头发、面部、眼睛、服装、饰品等）
 - **深度估计** — 通过微调的 Marigold 为每层自动生成深度图，确定正确的绘制顺序
 - **智能拆分** — 眼睛、耳朵、手套自动拆分为左/右；头发通过深度聚类拆分为前/后
-- **PSD 导出** — 直接在浏览器下载分层 PSD 文件（前端 ag-psd 实现，无需 Python 依赖）
-- **深度 PSD** — 可单独导出深度 PSD，用于 3D/视差工作流
+- **PSD 导出** — Save 节点直接写出分层 PSD（服务端 psd-tools，一层一张图、层名就是语义标签）
 - **预览输出** — 合成重建预览作为标准 ComfyUI IMAGE 输出
 - **HuggingFace 自动下载** — 首次使用时自动从 HuggingFace 下载模型
 - **显存优化** — 标签嵌入缓存、文本编码器卸载、分组卸载、可配置深度分辨率，适配低显存显卡
@@ -24,7 +23,7 @@
 | **SeeThrough Load LayerDiff Model** | 加载 LayerDiff SDXL 管线（图层生成） |
 | **SeeThrough Load Depth Model** | 加载 Marigold 深度估计管线 |
 | **SeeThrough Decompose** | 完整管线：LayerDiff + Marigold 深度 + 后处理 |
-| **SeeThrough Save PSD** | 保存图层 PNG + 元数据；通过浏览器按钮下载 PSD。深度图默认不存（`save_depth`） |
+| **SeeThrough Save PSD** | 输出**一张**分层 PSD（`<前缀>_<时间戳>.psd`），不再写每层 PNG / layers.json |
 
 ## 安装
 
@@ -91,7 +90,7 @@ ComfyUI/models/SeeThrough/
 3. 添加 **SeeThrough Save PSD** — 连接 `parts` 输出
 4. 添加 **Preview Image** — 连接 `preview` 输出
 5. 运行工作流
-6. 点击 Save PSD 节点上的 **Download PSD** 按钮生成并下载 PSD 文件
+6. 跑完即可 —— PSD 已经在 ComfyUI 的 output 目录里（`<前缀>_<时间戳>.psd`）
 
 ### 示例工作流
 
@@ -120,7 +119,6 @@ ComfyUI/models/SeeThrough/
 | `auto_download` | false | 本地找不到模型时是否自动从 HuggingFace 下载。默认关闭，避免模型名写错就静默拉几个 GB |
 | `resolution_depth` | -1 | 深度推理分辨率。-1 表示与图层相同。深度只用于图层排序（`depth_median`），图层像素不受它影响，所以降到 512~768 几乎无代价；`seethrough-basic.json` 里已设 512 |
 | `filename_prefix` | `image` | 输出文件名前缀。前端会按 LoadImage 的文件名自动填（`TT.png` → `TT`），实现「图名 = 目录名 = 前缀」；你手动改过的值不会被覆盖 |
-| `save_depth` | false | 是否为每层额外保存 `<图层>_depth.png`。只有视差 / 3D / 深度 PSD 才需要；关掉可让输出目录的文件数减半。绘制顺序（`depth_median`）照旧写进 `layers.json` |
 
 ### 显存优化指南
 
@@ -165,7 +163,7 @@ ComfyUI/models/SeeThrough/
 
 本插件封装了 [shitagaki-lab](https://github.com/shitagaki-lab) 的 [See-through](https://github.com/shitagaki-lab/see-through) 研究项目。
 
-PSD 生成使用浏览器端的 [ag-psd](https://github.com/nicasiomg/ag-psd) 库。
+PSD 由服务端用 [psd-tools](https://github.com/psd-tools/psd-tools) 写出（`requirements.txt` 里已有）。
 
 ## 许可证
 
