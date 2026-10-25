@@ -113,6 +113,7 @@ Drag any `.json` file into ComfyUI to load the workflow.
 | `resolution` | 1280 | Processing resolution (image is center-padded to square) |
 | `num_inference_steps` | 30 | Diffusion denoising steps (more = better quality, slower) |
 | `tblr_split` | true | Split symmetric parts (eyes, ears, handwear) into left/right |
+| `merge_face_details` | true | (GenerateLayers) Fold eyes (`irides` / `eyewhite` / `eyelash` / `eyebrow`), ears, nose and mouth into the `face` layer instead of exporting them separately. A face is always one piece in a 2D rig, and `nose` / `mouth` frequently come out as scattered dust — merging those just smudges the face, so empty ones are dropped. Merging happens **before** depth inference, so depth / PostProcess / save all handle a dozen fewer layers. Turn off for the raw split |
 | `cache_tag_embeds` | true | Pre-compute and cache tag embeddings, then unload text encoders to save VRAM |
 | `group_offload` | false | Enable group offload to drastically reduce peak VRAM (allocated ~0.2GB, reserved ~7GB) at cost of **2–3x slower** speed. Requires `diffusers>=0.37.0`. Also works on macOS/MPS now — the device was hardcoded to cuda before |
 | `auto_download` | false | If the model is not found locally, download it from HuggingFace. Off by default so a typo in the model name can't silently pull several GB |

@@ -113,6 +113,7 @@ ComfyUI/models/SeeThrough/
 | `resolution` | 1280 | 处理分辨率（图像会居中填充为正方形） |
 | `num_inference_steps` | 30 | 扩散去噪步数（越多质量越好，速度越慢） |
 | `tblr_split` | true | 是否将对称部位（眼睛、耳朵、手套）拆分为左/右 |
+| `merge_face_details` | true | （GenerateLayers）把眼睛（`irides` / `eyewhite` / `eyelash` / `eyebrow`）、耳朵、鼻子、嘴巴并进 `face` 层，不再单独输出。做 2D/骨骼动画时脸永远是一整块，这些细节单独拆出来只会多出一堆用不上的层；`nose` / `mouth` 在这个模型里还经常是散碎噪点，并进脸只会糊一脸。合并发生在深度推理**之前**，所以后面的 depth / PostProcess / 存盘都少十几层。没内容的细节层会直接丢掉。关掉可拿到原始拆分 |
 | `cache_tag_embeds` | true | 预计算并缓存标签嵌入，然后卸载文本编码器以节省显存 |
 | `group_offload` | false | 启用分组卸载，大幅降低峰值显存（实际占用约 0.2GB，预留约 7GB），但速度**慢 2–3 倍**。需要 `diffusers>=0.37.0`；macOS（MPS）也能用，之前设备写死 cuda 的 bug 已修 |
 | `auto_download` | false | 本地找不到模型时是否自动从 HuggingFace 下载。默认关闭，避免模型名写错就静默拉几个 GB |

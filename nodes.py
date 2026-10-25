@@ -97,6 +97,14 @@ VALID_BODY_PARTS_V2 = [
     "bottomwear", "legwear", "footwear", "tail", "wings", "objects",
 ]
 
+# 面部细节：对 2D 骨骼动画没有单独动的价值（脸永远是一整块），所以默认并回 face。
+# 名字要按「去左右后缀」的基名匹配——v3 直接给 eyewhite-l / ears-r，v2 的眼睛
+# 拆完叫 eyel / eyer / browl / browr，两套都得认。
+# 顺序 = 叠放顺序（先列的垫在下面）：耳朵在脸皮后面，其余都在脸皮上面。
+FACE_DETAIL_BELOW = ("ears", "earl", "earr")
+FACE_DETAIL_ABOVE = ("eyes", "eyel", "eyer", "eyewhite", "irides", "eyelash",
+                     "eyebrow", "browl", "browr", "nose", "mouth")
+
 folder_paths.add_model_folder_path("SeeThrough", os.path.join(folder_paths.models_dir, "SeeThrough"))
 
 
@@ -256,6 +264,102 @@ def _part_lr_split(tag, part_info):
 def _tag_lr_split(tag, tag2pinfo):
     if tag in tag2pinfo:
         tag2pinfo.update(_part_lr_split(tag, tag2pinfo.pop(tag)))
+
+
+def _detail_base(tag):
+    """eyewhite-l -> eyewhite；ears-r -> ears。v2 的 eyel / browr 原样返回。"""
+    for suf in ("-l", "-r"):
+        if tag.endswith(suf):
+            return tag[:-2]
+    return tag
+
+
+def _detail_has_content(img):
+    """这一层是真的画了东西，还是模型没找到该部位时吐的散碎点。
+
+    实测（1024 画布）「没找到」有三种形态：
+      · 几十个点摊在几百像素的大框里（nose / mouth 常见，bbox 密度 0.02%）；
+      · 缩在右下角一个 10×13 的实心小块里（包围盒退化，固定在 ~(1010, 1009)）——
+        这种块密度和连通性都正常，只能靠「又小又贴右下角」认；
+      · 零星散块（最大连通块撑不起整层的一半）。
+    真层的 bbox 密度最低也有 0.3%，而且最大连通块占整层的大头。
+    """
+    mask = img[..., -1] > 10
+    total = int(mask.sum())
+    if total < 16:
+        return False
+    nz = cv2.findNonZero(mask.astype(np.uint8))
+    if nz is None:
+        return False
+    bx, by, bw, bh = cv2.boundingRect(nz)
+    h, w = mask.shape[:2]
+    if bw <= 24 and bh <= 24 and bx >= 0.9 * w and by >= 0.9 * h:
+        return False
+    if total / float(max(bw * bh, 1)) < 0.002:
+        return False
+    _, _, stats, _ = cv2.connectedComponentsWithStats(mask.astype(np.uint8), connectivity=8)
+    main = int(stats[1:, 4].max()) if len(stats) > 1 else 0
+    return main / float(total) >= 0.35
+
+
+def _merge_face_details(layer_dict, fullpage=None):
+    """把眼睛/耳朵/鼻子/嘴巴并进 face（就地改 layer_dict）。返回 (并进去的, 丢掉的)。
+
+    在 GenerateLayers 里调：那时 layer_dict 是模型的原始输出，**还没拆左右**，
+    各层都是整张画布，直接按 alpha 叠就行。放到 PostProcess 也能用，但要赶在
+    裁剪/拆分之前，否则拿到的是小图、位置只在 xyxy 里，叠不上。
+
+    内容判空的细节层（多半是 nose / mouth）直接丢掉：并进 face 只会把散点糊到
+    脸上，那比少一层更糟。
+    """
+    if "face" not in layer_dict:
+        return [], []
+
+    # nose / mouth 的 RGB 模型给得不准，用原图补（只在有 alpha 的地方补）。
+    # 必须在合并之前做，否则这几个 tag 已经没了。
+    if fullpage is not None:
+        for t in ("nose", "mouth"):
+            im = layer_dict.get(t)
+            if im is not None and im.shape[:2] == fullpage.shape[:2]:
+                im = im.copy()
+                m = im[..., 3] > 15
+                im[..., :3][m] = fullpage[..., :3][m]
+                layer_dict[t] = im
+
+    below, above = [], []
+    gone = []
+    for tag in list(layer_dict.keys()):
+        base = _detail_base(tag)
+        if base in FACE_DETAIL_BELOW:
+            bucket = below
+        elif base in FACE_DETAIL_ABOVE:
+            bucket = above
+        else:
+            continue
+        if not _detail_has_content(layer_dict[tag]):
+            gone.append(tag)
+            del layer_dict[tag]
+            continue
+        bucket.append(tag)
+    if not below and not above:
+        return [], gone
+
+    def ordered(group, canonical):
+        """按 canonical 的顺序排（= 叠放顺序），同一基名的左右两片按名字稳定排。"""
+        return [t for base in canonical for t in sorted(group) if _detail_base(t) == base]
+
+    order = ordered(below, FACE_DETAIL_BELOW) + ["face"] + ordered(above, FACE_DETAIL_ABOVE)
+    imlist = []
+    for t in order:
+        im = layer_dict[t].copy()
+        # 和 GenerateDepth 里 compose_list 的合成分支同一个阈值：太淡的边不算内容
+        im[..., -1][im[..., -1] < 15] = 0
+        imlist.append(im)
+
+    layer_dict["face"] = img_alpha_blending(imlist, premultiplied=False)
+    for t in below + above:
+        del layer_dict[t]
+    return below + above, gone
 
 
 def _compute_depth_median(part_dict):
@@ -518,6 +622,14 @@ class SeeThrough_GenerateLayers:
                 "seed": ("INT", {"default": 42, "min": 0, "max": 2**32 - 1}),
                 "resolution": ("INT", {"default": 1280, "min": 512, "max": 2048, "step": 64}),
                 "num_inference_steps": ("INT", {"default": 30, "min": 1, "max": 100}),
+                "merge_face_details": ("BOOLEAN", {
+                    "default": True,
+                    "tooltip": "Keep eyes / ears / nose / mouth inside the face layer instead of exporting them "
+                               "as separate layers. A face is always one piece in a 2D rig, and nose / mouth "
+                               "often come out as scattered dust. Merging here (before depth) also means "
+                               "fewer layers go through the depth model and the rest of the pipeline. "
+                               "Turn off to get the raw split.",
+                }),
             },
         }
 
@@ -526,7 +638,8 @@ class SeeThrough_GenerateLayers:
     FUNCTION = "generate"
     CATEGORY = "SeeThrough"
 
-    def generate(self, image, layerdiff_model, seed=42, resolution=1280, num_inference_steps=30):
+    def generate(self, image, layerdiff_model, seed=42, resolution=1280, num_inference_steps=30,
+                 merge_face_details=True):
         pipeline = layerdiff_model
         device = mm.get_torch_device()
         offload = torch.device("cpu")
@@ -643,6 +756,17 @@ class SeeThrough_GenerateLayers:
         mm.soft_empty_cache()
         _log_vram("GenerateLayers offloaded to CPU")
         print(f"[SeeThrough] GenerateLayers complete: {len(layer_dict)} layers", flush=True)
+
+        # 面部细节并回 face。放在这里而不是 PostProcess：模型原本就没给 face 画五官，
+        # 五官永远单独一层；而做 2D 骨骼动画时脸是一整块。提前合掉之后，depth 阶段
+        # （Marigold 一次前向算 19 个类）、PostProcess、存盘都少十几个层。
+        if merge_face_details:
+            merged, empty = _merge_face_details(layer_dict, fullpage)
+            if merged:
+                print(f"[SeeThrough] Face details merged into 'face': {', '.join(sorted(merged))}", flush=True)
+            if empty:
+                print(f"[SeeThrough] Face details dropped (no content): {', '.join(sorted(empty))}", flush=True)
+            print(f"[SeeThrough] GenerateLayers final: {len(layer_dict)} layers", flush=True)
 
         layers_data = SeeThrough_LayersData(layer_dict, fullpage, input_img, resolution, pad_size, pad_pos)
 
@@ -828,6 +952,21 @@ class SeeThrough_PostProcess:
             tag2pinfo[tag] = {"img": img, "depth": depth, "xyxy": [0, 0, resolution, resolution],
                               "mask": mask, "tag": tag}
 
+        # Nose/mouth color restoration
+        # 只有关掉 GenerateLayers 的 merge_face_details 时才会走到这里——那时候
+        # nose/mouth 还是独立层，RGB 得从原图补回来。
+        for restore_tag in ("nose", "mouth"):
+            if restore_tag in tag2pinfo:
+                pinfo = tag2pinfo[restore_tag]
+                src_h, src_w = pinfo["img"].shape[:2]
+                fp_h, fp_w = fullpage.shape[:2]
+                if src_h == fp_h and src_w == fp_w:
+                    pinfo["img"][..., :3] = fullpage[..., :3]
+                else:
+                    x1, y1 = pinfo["xyxy"][0], pinfo["xyxy"][1]
+                    crop = fullpage[y1:min(y1 + src_h, fp_h), x1:min(x1 + src_w, fp_w), :3]
+                    pinfo["img"][:crop.shape[0], :crop.shape[1], :3] = crop
+
         # Eye splitting (v2 composite 'eyes')
         if "eyes" in tag2pinfo:
             part_info = tag2pinfo.pop("eyes")
@@ -876,19 +1015,6 @@ class SeeThrough_PostProcess:
                 except Exception as e:
                     print(f"[SeeThrough] Hair clustering failed: {e}, keeping as-is", flush=True)
                     tag2pinfo["hair"] = part_info
-
-        # Nose/mouth color restoration
-        for restore_tag in ("nose", "mouth"):
-            if restore_tag in tag2pinfo:
-                pinfo = tag2pinfo[restore_tag]
-                src_h, src_w = pinfo["img"].shape[:2]
-                fp_h, fp_w = fullpage.shape[:2]
-                if src_h == fp_h and src_w == fp_w:
-                    pinfo["img"][..., :3] = fullpage[..., :3]
-                else:
-                    x1, y1 = pinfo["xyxy"][0], pinfo["xyxy"][1]
-                    crop = fullpage[y1:min(y1 + src_h, fp_h), x1:min(x1 + src_w, fp_w), :3]
-                    pinfo["img"][:crop.shape[0], :crop.shape[1], :3] = crop
 
         # Crop + depth_median
         for tag in list(tag2pinfo.keys()):
