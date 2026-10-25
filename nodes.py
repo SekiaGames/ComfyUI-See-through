@@ -276,6 +276,19 @@ def _detail_base(tag):
     return tag
 
 
+def _as_bool(value, default=True):
+    """吃 BOOLEAN 输入的各种写法。
+
+    老工作流缺 widget 时会传 None；前端按钮留下的字符串（"Download PSD"）也可能
+    落进 BOOLEAN 的位置，`bool()` 会把它当真，所以只认明确的真值写法。
+    """
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in ("1", "true", "yes", "on")
+
+
 def _is_dust_layer(img):
     """这一层是模型「这张图没有这个部位」的占位输出，不是内容。
 
@@ -662,6 +675,10 @@ class SeeThrough_GenerateLayers:
                 "seed": ("INT", {"default": 42, "min": 0, "max": 2**32 - 1}),
                 "resolution": ("INT", {"default": 1280, "min": 512, "max": 2048, "step": 64}),
                 "num_inference_steps": ("INT", {"default": 30, "min": 1, "max": 100}),
+            },
+            # 这两个是后加的开关，放 optional：老工作流的 widgets_values 比节点定义短，
+            # 放 required 会在执行时报「缺少必需的输入：drop_empty_layers」。
+            "optional": {
                 "merge_face_details": ("BOOLEAN", {
                     "default": True,
                     "tooltip": "Keep eyes / eyebrows / ears / nose / mouth and (when present) glasses / "
@@ -686,6 +703,9 @@ class SeeThrough_GenerateLayers:
 
     def generate(self, image, layerdiff_model, seed=42, resolution=1280, num_inference_steps=30,
                  merge_face_details=True, drop_empty_layers=True):
+        # 显式传 None（老工作流没有这两个 widget）时按默认「开」处理
+        merge_face_details = _as_bool(merge_face_details, True)
+        drop_empty_layers = _as_bool(drop_empty_layers, True)
         pipeline = layerdiff_model
         device = mm.get_torch_device()
         offload = torch.device("cpu")
@@ -1136,8 +1156,7 @@ class SeeThrough_SavePSD:
 
         # 旧工作流里这个位置可能是前端按钮留下的字符串（"Download PSD"），
         # 直接 bool() 会把它当真。只认明确的真值写法。
-        if not isinstance(save_depth, bool):
-            save_depth = str(save_depth).strip().lower() in ("1", "true", "yes", "on")
+        save_depth = _as_bool(save_depth, False)
 
         tag2pinfo = parts["tag2pinfo"]
         frame_size = parts["frame_size"]
