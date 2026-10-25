@@ -81,10 +81,7 @@
         "Node name for S&R": "SeeThrough_SavePSD"
       },
       "widgets_values": [
-        "image",
-        false,
-        "Download PSD",
-        "Download Depth PSD"
+        "image"
       ]
     },
     {

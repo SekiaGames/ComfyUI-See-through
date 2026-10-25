@@ -276,6 +276,27 @@ def _detail_base(tag):
     return tag
 
 
+def _content_box(img, alpha_min=15, frac=0.02):
+    """真内容的包围盒（滤掉孤立碎块再取），没有内容返回 None。
+
+    直接按 alpha 取 box 会被画布边角的散点拉满整张画布（实测 neck/face 都有这问题），
+    PSD 里就是一堆 1024×1024 的层，又大又难编辑。规则和 layerkit.components_keep
+    一致：连通块面积 ≥ 最大块的 2% 才算内容。
+    """
+    m = (img[..., 3] > alpha_min).astype(np.uint8)
+    if not m.any():
+        return None
+    n, lab, st, _ = cv2.connectedComponentsWithStats(m, connectivity=8)
+    if n <= 1:
+        return None
+    keep = np.zeros(n, bool)
+    keep[1:] = st[1:, 4] >= max(4, frac * int(st[1:, 4].max()))
+    ys, xs = np.where(keep[lab])
+    if not len(xs):
+        return None
+    return int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1
+
+
 def _as_bool(value, default=True):
     """吃 BOOLEAN 输入的各种写法。
 
@@ -1133,85 +1154,72 @@ class SeeThrough_SavePSD:
                                "image name and this prefix all match.",
                 }),
             },
-            "optional": {
-                "save_depth": ("BOOLEAN", {
-                    "default": False,
-                    "tooltip": "Write <layer>_depth.png next to every layer. Off by default: "
-                               "depth is only needed for parallax/3D export, and it doubles the "
-                               "file count in the output folder. Drawing order (depth_median) is "
-                               "always recorded in layers.json either way.",
-                }),
-            },
+            "optional": {},
         }
 
     RETURN_TYPES = ("STRING",)
-    RETURN_NAMES = ("info_file",)
+    RETURN_NAMES = ("psd_path",)
     FUNCTION = "save"
     CATEGORY = "SeeThrough"
     OUTPUT_NODE = True
 
-    def save(self, parts, filename_prefix="seethrough", save_depth=False):
-        from PIL import Image
-        import json
+    def save(self, parts, filename_prefix="seethrough"):
+        """只输出一份分层 PSD。
 
-        # 旧工作流里这个位置可能是前端按钮留下的字符串（"Download PSD"），
-        # 直接 bool() 会把它当真。只认明确的真值写法。
-        save_depth = _as_bool(save_depth, False)
+        一张 PSD 就够：层级关系、叠放顺序、可编辑环境全在里面，人工修图直接改它。
+        以前那套「每层一个 png + layers.json + 可选深度 png」是给下游自己拼的，
+        现在下游（Spine 工作台）直接读 PSD，所以不再写这些文件，输出目录里
+        一轮只有一张 <prefix>_<时间戳>.psd。
+
+        层的顺序 = 绘制顺序（先写的在下面）：按 depth_median 从大到小写，
+        所以 PSD 里最下面那层就是最远的，Photoshop 打开看到的就是正确的层次。
+        """
+        from PIL import Image
+        from psd_tools import PSDImage
 
         tag2pinfo = parts["tag2pinfo"]
-        frame_size = parts["frame_size"]
-        canvas_h, canvas_w = frame_size
+        canvas_h, canvas_w = parts["frame_size"]
 
         output_dir = folder_paths.get_output_directory()
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        # 文件名保持「前缀_时间戳_部位」，不再带 8 位随机后缀：一轮 29 层的名字短一半，
-        # 下游按时间戳认批次也简单（20261024_151110 而不是 20261024_151110_7291cdfe）。
-        # 同一秒里跑两次才可能撞（一轮要几分钟），撞了才补 4 位随机数。
-        if os.path.exists(os.path.join(output_dir, f"{filename_prefix}_{ts}_layers.json")):
+        psd_path = os.path.join(output_dir, f"{filename_prefix}_{ts}.psd")
+        # 同一秒里跑两次才可能撞（一轮要几分钟），撞了才补 4 位随机数
+        if os.path.exists(psd_path):
             ts = f"{ts}_{str(uuid.uuid4())[:4]}"
+            psd_path = os.path.join(output_dir, f"{filename_prefix}_{ts}.psd")
 
-        sorted_tags = sorted(tag2pinfo.keys(), key=lambda t: tag2pinfo[t].get("depth_median", 1), reverse=True)
+        sorted_tags = sorted(tag2pinfo.keys(),
+                             key=lambda t: tag2pinfo[t].get("depth_median", 1), reverse=True)
 
-        layer_info_list = []
+        psd = PSDImage.new(mode="RGBA", size=(int(canvas_w), int(canvas_h)), depth=8)
+        n = 0
         for tag in sorted_tags:
             pinfo = tag2pinfo[tag]
             img = pinfo.get("img")
-            depth = pinfo.get("depth")
-            if img is None:
-                continue
-
+            if img is None or not np.any(img[..., -1] > 0):
+                continue                                    # 整层透明的不要（PSD 里是空层）
             xyxy = pinfo.get("xyxy", [0, 0, img.shape[1], img.shape[0]])
-            x1, y1, x2, y2 = [int(v) for v in xyxy]
+            x1, y1 = int(xyxy[0]), int(xyxy[1])
 
-            layer_filename = f"{filename_prefix}_{ts}_{tag}.png"
-            Image.fromarray(img).save(os.path.join(output_dir, layer_filename))
+            # 裁到真内容再写：层框紧凑，PSD 也小得多（透明区域里模型留下的杂色
+            # 会把 RLE 压缩率拖垮，在 PS 里缩放图层时还容易泛黑边）
+            box = _content_box(img)
+            if box is not None:
+                bx1, by1, bx2, by2 = box
+                img = img[by1:by2, bx1:bx2]
+                x1, y1 = x1 + bx1, y1 + by1
+            img = img.copy()
+            img[..., :3][img[..., -1] < 15] = 0
 
-            entry = {"name": tag, "filename": layer_filename,
-                     "left": x1, "top": y1, "right": x2, "bottom": y2,
-                     "depth_median": float(pinfo.get("depth_median", 1))}
+            psd.create_pixel_layer(Image.fromarray(img), name=tag,
+                                   top=y1, left=x1, opacity=255)
+            n += 1
 
-            if save_depth and depth is not None:
-                depth_filename = f"{filename_prefix}_{ts}_{tag}_depth.png"
-                if depth.ndim == 2:
-                    Image.fromarray(depth, mode="L").save(os.path.join(output_dir, depth_filename))
-                else:
-                    Image.fromarray(depth).save(os.path.join(output_dir, depth_filename))
-                entry["depth_filename"] = depth_filename
-
-            layer_info_list.append(entry)
-
-        info_filename = f"{filename_prefix}_{ts}_layers.json"
-        info_path = os.path.join(output_dir, info_filename)
-        with open(info_path, "w", encoding="utf-8") as f:
-            json.dump({"prefix": filename_prefix, "timestamp": ts,
-                       "layers": layer_info_list, "width": int(canvas_w), "height": int(canvas_h)}, f, indent=2)
-
-        log_path = os.path.join(output_dir, "seethrough_psd_info.log")
-        with open(log_path, "w") as f:
-            f.write(info_filename)
-
-        print(f"[SeeThrough] {len(layer_info_list)} layers saved. Use 'Download PSD' button to generate PSD.", flush=True)
-        return (info_path,)
+        psd.save(psd_path)
+        size_mb = os.path.getsize(psd_path) / (1024 * 1024)
+        print(f"[SeeThrough] PSD saved: {os.path.basename(psd_path)} "
+              f"({n} layers, {canvas_w}x{canvas_h}, {size_mb:.1f} MB)", flush=True)
+        return (psd_path,)
 
 
 class SeeThrough_PartsToLayers:
