@@ -113,7 +113,7 @@ ComfyUI/models/SeeThrough/
 | `resolution` | 1280 | 处理分辨率（图像会居中填充为正方形） |
 | `num_inference_steps` | 30 | 扩散去噪步数（越多质量越好，速度越慢） |
 | `tblr_split` | true | 是否将对称部位（眼睛、耳朵、手套）拆分为左/右 |
-| `merge_face_details` | true | （GenerateLayers）把眼睛（`irides` / `eyewhite` / `eyelash` / `eyebrow`）、耳朵、鼻子、嘴巴并进 `face` 层，不再单独输出。做 2D/骨骼动画时脸永远是一整块，这些细节单独拆出来只会多出一堆用不上的层；`nose` / `mouth` 在这个模型里还经常是散碎噪点，并进脸只会糊一脸。没内容的细节层会直接丢掉。**不省时间也不省显存**（深度阶段的 batch 恒为 19 个槽位），省的是输出文件数和下游的处理量。关掉可拿到原始拆分 |
+| `merge_face_details` | true | （GenerateLayers）把眼睛（`irides` / `eyewhite` / `eyelash` / `eyebrow`）、耳朵、鼻子、嘴巴，以及**存在时的眼镜（`eyewear`）和耳饰（`earwear`）**并进 `face` 层，不再单独输出。做 2D/骨骼动画时脸永远是一整块，这些细节单独拆出来只会多出一堆用不上的层；`nose` / `mouth` 在这个模型里还经常是散碎噪点，并进脸只会糊一脸。没内容的细节层会直接丢掉。**不省时间也不省显存**（深度阶段的 batch 恒为 19 个槽位），省的是输出文件数和下游的处理量。关掉可拿到原始拆分 |
 | `drop_empty_layers` | true | （GenerateLayers）模型没找到某个部位时会留一个「占位小块」（右下角 ~(1010,1009) 的 11×13 实心块，整层 70 来个像素），导出来就是一张 1024² 的空白图。开启后这类层直接不输出。判据保守：整层像素还要小于画布的 0.02%，所以真实的小配件（耳饰、戒指）不会被误删 |
 | `cache_tag_embeds` | true | 预计算并缓存标签嵌入，然后卸载文本编码器以节省显存 |
 | `group_offload` | false | 启用分组卸载，大幅降低峰值显存（实际占用约 0.2GB，预留约 7GB），但速度**慢 2–3 倍**。需要 `diffusers>=0.37.0`；macOS（MPS）也能用，之前设备写死 cuda 的 bug 已修 |

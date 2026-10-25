@@ -100,10 +100,12 @@ VALID_BODY_PARTS_V2 = [
 # 面部细节：对 2D 骨骼动画没有单独动的价值（脸永远是一整块），所以默认并回 face。
 # 名字要按「去左右后缀」的基名匹配——v3 直接给 eyewhite-l / ears-r，v2 的眼睛
 # 拆完叫 eyel / eyer / browl / browr，两套都得认。
-# 顺序 = 叠放顺序（先列的垫在下面）：耳朵在脸皮后面，其余都在脸皮上面。
+# 顺序 = 叠放顺序（先列的垫在下面）：耳朵在脸皮后面，其余都在脸皮上面；
+# 眼镜/耳饰压在最上层（眼镜盖住眼睛，耳饰在耳朵上面）。
 FACE_DETAIL_BELOW = ("ears", "earl", "earr")
 FACE_DETAIL_ABOVE = ("eyes", "eyel", "eyer", "eyewhite", "irides", "eyelash",
-                     "eyebrow", "browl", "browr", "nose", "mouth")
+                     "eyebrow", "browl", "browr", "nose", "mouth",
+                     "eyewear", "earwear")
 
 folder_paths.add_model_folder_path("SeeThrough", os.path.join(folder_paths.models_dir, "SeeThrough"))
 
@@ -662,9 +664,10 @@ class SeeThrough_GenerateLayers:
                 "num_inference_steps": ("INT", {"default": 30, "min": 1, "max": 100}),
                 "merge_face_details": ("BOOLEAN", {
                     "default": True,
-                    "tooltip": "Keep eyes / ears / nose / mouth inside the face layer instead of exporting them "
-                               "as separate layers. A face is always one piece in a 2D rig, and nose / mouth "
-                               "often come out as scattered dust. Turn off to get the raw split.",
+                    "tooltip": "Keep eyes / eyebrows / ears / nose / mouth and (when present) glasses / "
+                               "earrings inside the face layer instead of exporting them separately. "
+                               "A face is always one piece in a 2D rig, and nose / mouth often come out "
+                               "as scattered dust. Turn off to get the raw split.",
                 }),
                 "drop_empty_layers": ("BOOLEAN", {
                     "default": True,
